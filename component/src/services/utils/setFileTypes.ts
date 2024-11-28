@@ -96,24 +96,44 @@ export class SetFileTypes {
   // needs to be set after images to overwrite maxNumberOfFiles
   // prettier-ignore
   private static processCamera(
-      serviceIO: ServiceIO, remark: Remarkable, camera: DeepChat['camera'], images?: DeepChat['images']) {
+      serviceIO: ServiceIO, 
+      remark: Remarkable, 
+      camera: DeepChat['camera'], 
+      images?: DeepChat['images']) {
     const files = serviceIO.fileTypes.images?.files || {};
     const defaultFormats = {acceptedFormats: 'image/*', ...files};
     if (!camera) return;
+  
     if (navigator.mediaDevices.getUserMedia !== undefined) {
-      // check how maxNumberOfFiles is set here - if user has set in images - should use that instead
-      serviceIO.camera = SetFileTypes.parseConfig(serviceIO.connectSettings, defaultFormats, remark, camera);
-      if (typeof camera === 'object') {
-        serviceIO.camera.modalContainerStyle = camera.modalContainerStyle;
-        // adding configuration that parseConfig does not add (don't want to overwrite as it may have processed properties)
-        if (camera.files) {
-          serviceIO.camera.files ??= {}; // for typescript
-          serviceIO.camera.files.format = camera.files?.format;
-          // this.camera.files.newFilePrefix = customService.camera.files?.newFilePrefix; // can implement in the future
-          serviceIO.camera.files.dimensions = camera.files?.dimensions;
+      // Specify rear camera preference
+      const constraints = {
+        video: { 
+          facingMode: { ideal: 'environment' } // 'environment' targets rear camera
         }
-      }
-      // if camera is not available - fallback to normal image upload
+      };
+  
+      navigator.mediaDevices.getUserMedia(constraints)
+        .then(stream => {
+          // Camera access successful
+          serviceIO.camera = SetFileTypes.parseConfig(serviceIO.connectSettings, defaultFormats, remark, camera);
+          
+          if (typeof camera === 'object') {
+            serviceIO.camera.modalContainerStyle = camera.modalContainerStyle;
+            
+            if (camera.files) {
+              serviceIO.camera.files ??= {}; 
+              serviceIO.camera.files.format = camera.files?.format;
+              serviceIO.camera.files.dimensions = camera.files?.dimensions;
+            }
+          }
+        })
+        .catch(err => {
+          // Fallback to front camera or default image upload if rear camera fails
+          console.warn('Error accessing rear camera:', err);
+          if (!images) {
+            serviceIO.fileTypes.images = SetFileTypes.parseConfig(serviceIO.connectSettings, defaultFormats, remark, camera);
+          }
+        });
     } else if (!images) {
       serviceIO.fileTypes.images = SetFileTypes.parseConfig(serviceIO.connectSettings, defaultFormats, remark, camera);
     }
